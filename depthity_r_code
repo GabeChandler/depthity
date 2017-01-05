@@ -1,0 +1,117 @@
+find.i <- function(n, ind) {
+  # Helper function to find the depthity values that correspond to a particular data point
+  # Called by function computeDepthity
+  # Inputs:
+  #  n - number of observations in data set
+  #  ind - the index of the point for which we want to find all depthity values for
+  # Outputs: 
+  #  out - vector of indexes that involve point ind
+  k <- 1
+  out <- c()
+  for (i in 1:(n-1)) {
+    for (j in (i+1):n) {
+      if (i==ind | j==ind)
+        out <- c(out, k)
+      k <- k + 1
+    }
+  }
+  return(out)
+}
+
+
+depthity <- function(x, angle=45, standardize=TRUE) {
+  # Function to compute the depthity values for the midpoint for each pair of points in the data set x
+  # Inputs:
+  #   x: matrix consisting of the input variables of the observations, where each row
+  #      corresponds to an observation and each column a variable
+  #   angle:  the angle formed between any line segment on the surface of the cone and 
+  #      the axis of hte cone
+  #  standardize: logical to whether the data should be univariately standardized (each variable will 
+  #     be transformed to have mean 0 and variance 1 if true)
+  # Returns:
+  #  depthity:  a n-choose-2 by 101 matrix consisting of depthity values for each pair of points
+  #     midpoints
+  data <- x
+  if (standardize==TRUE) {
+    for (i in 1:ncol(data)) {
+      data[,i] <- scale(data[,i])
+    }
+  }
+  #####Compute the maximum distance explored for point of cone
+  ptm <- proc.time()
+  tol=.0001
+  depths <- c()
+  midpoint.save <- c()
+  max.dist <- 0
+  for (i in 1:(nrow(data)-1)) {
+    for (j in (i+1):nrow(data)) {
+      dist <- sqrt(sum((data[i, ] - data[j, ])^2))
+      if (dist > max.dist)
+        max.dist <- dist
+    }
+  }
+  range <- seq(0, max.dist, length.out=100)  #how far to go out away from the midpoint
+  range <- range[-1]
+  mult <- tan(pi * angle / 180)
+  ####initialize vector of classification potential
+  ####Compute depthity function for the ith point
+  ith.fit <- c()
+  depths <- matrix(0,ncol=2*length(range),nrow=choose(nrow(data),2))
+  ####run through all of points.  
+  m <- 1
+  for (i in 1:(nrow(data)-1)) {  
+    for (j in (i+1):nrow(data)) {
+      midpoint <- (data[i, ] + data[j, ]) / 2  #compute midpoint of a pair of points
+      data.c <- t(apply(data, 1, '-', midpoint))  #center data so midpoint is mapped to origin 
+      vect <- data.c[i, ]  #find orientation of line connecting the pair of points
+      proj1 <- apply(t(apply(data.c, 1, '*', vect)), 1, sum)/sum(vect^2)  #first step in projecting data onto this line
+      proj2 <- t(matrix(rep(vect, nrow(data)), ncol=nrow(data))) * proj1  #projections onto line
+      dist.p <- sqrt(apply((data.c - proj2)^2, 1, sum))  #distance from each point to its projection
+      vect.u <- vect / sqrt(sum(vect^2))  #unit version of vector for scaling
+      dep <- c()
+      for (k in 1:length(range)) {
+        split.p.l <- range[k] * vect.u  #get a split point on the left
+        split.p.r <- - range[k] * vect.u   #and another on the right
+        dist.p.l <- sqrt(apply(t(apply(proj2, 1, '-', split.p.l))^2, 1, sum))  #how far projection is from split point
+        dist.p.r <- sqrt(apply(t(apply(proj2, 1, '-', split.p.r))^2, 1, sum))
+        inside <- abs(dist.p.l + dist.p.r - 2 * range[k]) < tol  #find points between two split points
+        left <- dist.p.l < dist.p.r  #need to consider points beyond other split point, which side is it on? 
+        good.l <- (dist.p < mult * dist.p.l) & (inside | left == 0)  #find points in cone
+        good.r <- (dist.p < mult * dist.p.r) & (inside | left == 1)
+        toward.l <- inside & (dist.p.l < dist.p.r) #abs(dist.p.l + dist.p.o - range[k]) < tol
+        toward.r <- inside &! toward.l #abs(dist.p.r + dist.p.o - range[k]) < tol
+        toward.l <- toward.l & good.l
+        toward.r <- toward.r & good.r
+        dep <- c(dep, min(c(sum(toward.l), sum(good.l)-sum(toward.l))))
+        dep <- c(dep, min(c(sum(toward.r), sum(good.r)-sum(toward.r))))
+      }
+      depths[m, ] <- dep
+      m <- m + 1
+    }
+  }
+  return(list(angle=angle, depths=depths))
+}
+
+computeDepthity <- function(depthity.out, y) {
+  # Function to take "local" depths computed by functuion depthity and return quantiel function
+  # Inputs: 
+  #  depthity.out: an object created by function depthity 
+  #  y:  labels for the class of training data (binary, NA for non-training observations)
+  # Outputs: 
+  #  within - matrix of average depthity values for pairs of points in same class
+  #  between - matrix of average depthity values for pairs of points in different classes
+  qfns <- matrix(0, nrow=length(y)-1, ncol=101)
+  ###compute the depthity functions
+  first <- c()
+  second <- c()
+  n <- length(y)
+  for (i in 1:n) {
+    qs <- seq(0,1,.01)  #computes quantiles at 101 length partition of unit interval
+    ind <- find.i(n, i)
+    for (k in 1:length(ind)) 
+      qfns[k, ] <- quantile(depths[ind[k],], qs, na.rm=TRUE)
+    first <- rbind(first, apply(qfns[y[-i]==0,], 2, mean))
+    second <- rbind(second, apply(qfns[y[-i]==1,], 2, mean))
+  }
+  return(list(within=rbind(first[y==0,], second[y==1,]),between=rbind(second[y==1,], first[y==0,])))
+}
