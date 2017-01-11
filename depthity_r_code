@@ -1,3 +1,6 @@
+library(fda)
+library(e1071)
+
 find.i <- function(n, ind) {
   # Helper function to find the depthity values that correspond to a particular data point
   # Called by function computeDepthity
@@ -93,7 +96,7 @@ depthity <- function(x, angle=45, standardize=TRUE) {
 }
 
 computeDepthity <- function(depthity.out, y) {
-  # Function to take "local" depths computed by functuion depthity and return quantiel function
+  # Function to take "local" depths computed by functuion depthity and return quantile function
   # Inputs: 
   #  depthity.out: an object created by function depthity 
   #  y:  labels for the class of training data (binary, NA for non-training observations)
@@ -101,17 +104,44 @@ computeDepthity <- function(depthity.out, y) {
   #  within - matrix of average depthity values for pairs of points in same class
   #  between - matrix of average depthity values for pairs of points in different classes
   qfns <- matrix(0, nrow=length(y)-1, ncol=101)
+  depths <- depthity.out$depths
   ###compute the depthity functions
-  first <- c()
-  second <- c()
+  zero <- c()
+  one <- c()
   n <- length(y)
   for (i in 1:n) {
     qs <- seq(0,1,.01)  #computes quantiles at 101 length partition of unit interval
     ind <- find.i(n, i)
     for (k in 1:length(ind)) 
       qfns[k, ] <- quantile(depths[ind[k],], qs, na.rm=TRUE)
-    first <- rbind(first, apply(qfns[y[-i]==0,], 2, mean))
-    second <- rbind(second, apply(qfns[y[-i]==1,], 2, mean))
+    zero <- rbind(zero, apply(qfns[y[-i]==0,], 2, mean))  #average over all other points that have label 0
+    one <- rbind(one, apply(qfns[y[-i]==1,], 2, mean))  #average over all other points that have label 1
   }
-  return(list(within=rbind(first[y==0,], second[y==1,]),between=rbind(second[y==1,], first[y==0,])))
+  return(list(depth.zero=zero,depth.one=one))
 }
+
+
+depth.classify <- function(depths, y) {
+  # Function to predict class of observations of unknown (NA) classes via fPCA and SVM
+  # Requires packages fda and e1071
+  # Inputs:
+  #  depthity - an object produced by computeDepthity
+  #  y - a binary (0,1) vector that has at least one value of NA
+  # Returns:
+  #  class - a predicted class for all test observations
+  if (any(is.na(y))==FALSE) {
+    stop("must have at least one observation with unknown class")
+  }
+  b1.2 <- create.bspline.basis(nbasis=47, norder=4)
+  funs <- rbind(depths$depth.zero, depths$depth.one)
+  out <- Data2fd(argvals=seq(0,1,.01), y=t(funs), basisobj=b1.2)
+  pca <- pca.fd(out,nharm=4)
+  scores <- cbind(pca$scores[1:length(y),], pca$scores[length(y)+(1:length(y)),])
+  scores.data <- data.frame(scores, y)
+  scores.train <- scores.data[is.na(y)==FALSE,]
+  scores.test <- scores.data[is.na(y)==TRUE,]
+  fit <- svm(y ~ . , data=scores.train, kernel="linear")
+  pred <- predict(fit, scores.test)
+  return(round(pred))
+}
+
