@@ -113,9 +113,9 @@ computeDepthity <- function(depthity.out, y) {
     qs <- seq(0,1,.01)  #computes quantiles at 101 length partition of unit interval
     ind <- find.i(n, i)
     for (k in 1:length(ind)) 
-      qfns[k, ] <- quantile(depths[ind[k],], qs, na.rm=TRUE)
-    zero <- rbind(zero, apply(qfns[y[-i]==0,], 2, mean))  #average over all other points that have label 0
-    one <- rbind(one, apply(qfns[y[-i]==1,], 2, mean))  #average over all other points that have label 1
+      qfns[k, ] <- quantile(depths[ind[k],], qs)#, na.rm=TRUE)
+    zero <- rbind(zero, apply(qfns[which(y[-i]==0),], 2, mean))  #average over all other points that have label 0
+    one <- rbind(one, apply(qfns[which(y[-i]==1),], 2, mean))  #average over all other points that have label 1
   }
   return(list(depth.zero=zero,depth.one=one))
 }
@@ -145,3 +145,11 @@ depth.classify <- function(depths, y) {
   return(round(pred))
 }
 
+###Sample Usage
+data.temp <- iris[c(1:10,51:60),]
+x <- as.matrix(data.temp[,1:4])
+y <- as.numeric(data.temp[,5]) - 1 #subtraction to make it 0,1
+y[sample(20,7)] <- NA
+d1 <- depthity(x)
+d2 <- computeDepthity(d1,y)
+depth.classify(d2,y)
