@@ -2,7 +2,7 @@ kern <- function(x,y,sigma=1)
   return(exp(-sum((x-y)^2)/sigma))
 
 
-  depthity.kern <- function(data, kern, angle=45) {
+depthity.kern <- function(data, kern, angle=45) {
   # kernelized version of depthity
   # 
   # inputs: 
