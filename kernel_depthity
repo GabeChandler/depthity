@@ -1,0 +1,39 @@
+kern <- function(x,y,sigma=1)
+  return(exp(-sum((x-y)^2)/sigma))
+
+
+depthity.kern <- function(data, kern, angle=45) {
+  # kernelized version of depthity
+  # 
+  # inputs: 
+  #   data - a data matrix of explanetory variables
+  #   kern - a kernel function
+  #   angle - angle of cone from midline
+  splits <- seq(-1,1,length.out=100)
+  depthity <- rep(0,nrow(data))
+  dep <- c()
+  data <- apply(data, 2, scale)
+  norm.k2 <- rep(0, nrow(data))
+  error.k <- rep(0, nrow(data))
+  k.to.mid <- rep(0, nrow(data))
+  for (i in 1:(nrow(data)-1)) {
+    for (j in (i+1):nrow(data)) {
+      for (k in 1:nrow(data)) {
+        norm.k2[k] <- kern(data[k,],data[k,]) + 1/4*(kern(data[i,],data[i,])+kern(data[j,],data[j,])) + 1/2*kern(data[i,],data[j,])-kern(data[k,], data[i,])-kern(data[k,], data[j,])
+        k.to.mid[k] <- (kern(data[k,], data[i,])-kern(data[k,], data[j,])+1/2*(kern(data[j,], data[j,])-kern(data[i,], data[i,])))/sqrt(kern(data[i,],data[i,])+kern(data[j,],data[j,])-2*kern(data[i,], data[j,]))
+        error.k[k] <- sqrt(abs(norm.k2[k] - k.to.mid[k]^2))
+      }
+      for (c in 1:length(splits)) {
+        good <- rep(1, nrow(data))
+        s <- splits[c]
+        good[k.to.mid/s > 1] <- 0  #points on other side of cone tip removed
+        d.to.tip <- abs(k.to.mid - s)
+        good <- good * (atan(error.k / d.to.tip) < angle)  #points outside of cone removed
+        good <- good * (1 - 2*(sign(k.to.mid)==sign(s)))  #which side of midpoint are they on
+        depthity[c] <- min(c(sum(good==-1), sum(good==1)))
+      }
+      dep <- rbind(dep, depthity)
+    }
+  }
+  return(dep)
+}
