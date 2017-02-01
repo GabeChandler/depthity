@@ -38,7 +38,7 @@ depthity.kern <- function(data, kern, angle=45) {
 ####Sample Usage
 ################
 
-data <- iris[51:150,1:4]
+data <- iris[1:100,1:4]
 kern <- function(x,y,sigma=10)
   return(exp(-sum((x-y)^2)/sigma))
 deps <- depthity.kern(data, kern )
