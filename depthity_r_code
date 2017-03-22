@@ -21,79 +21,68 @@ find.i <- function(n, ind) {
   return(out)
 }
 
-
-depthity <- function(x, angle=45, standardize=TRUE) {
-  # Function to compute the depthity values for the midpoint for each pair of points in the data set x
-  # Inputs:
-  #   x: matrix consisting of the input variables of the observations, where each row
-  #      corresponds to an observation and each column a variable
-  #   angle:  the angle formed between any line segment on the surface of the cone and 
-  #      the axis of hte cone
-  #  standardize: logical to whether the data should be univariately standardized (each variable will 
-  #     be transformed to have mean 0 and variance 1 if true)
-  # Returns:
-  #  depthity:  a n-choose-2 by 101 matrix consisting of depthity values for each pair of points
-  #     midpoints
-  data <- x
-  if (standardize==TRUE) {
-    for (i in 1:ncol(data)) {
-      data[,i] <- scale(data[,i])
+depthity <- function(data, kernel="linear", range=2, angle=45, p1=1, p2=0) {
+  # kernelized version of depthity
+  # 
+  # inputs: 
+  #   data - a data matrix of explanetory variables
+  #   kern - a kernel function (of form "linear", "rbf" or "poly", or a function)
+  #   range - how far from the anchor point should we extend in each direction
+  #   angle - angle of cone from midline
+  #   p1 - first parameter for kernel
+  #   p2 - second parameter for kernel
+  # returns:
+  #   object to be used by function computeDepthity
+  if (is.function(kernel)==TRUE)
+    kern <- kernel
+  if (kernel == "linear") {
+    kern <- function(x,y)
+      return(sum(x*y))
+  }
+  if (kernel == "rbf") {
+    kern <- function(x,y)
+      return(exp(-sum((x-y)^2)/p1))
+  }             
+  if (kernel == "poly") {
+    kern <- function(x,y)
+      return((sum(x*y)+p2)^p1)
+  }
+  gram <- matrix(0,nrow(data), nrow(data))
+  for (i in 1:nrow(data)) {
+    for (j in i:nrow(data)) {
+      gram[i,j] <- kern(data[i,], data[j,])
+      gram[j,i] <- gram[i,j]
     }
   }
-  #####Compute the maximum distance explored for point of cone
-  ptm <- proc.time()
-  tol=.0001
-  depths <- c()
-  midpoint.save <- c()
-  max.dist <- 0
+  splits <- seq(-range,range,length.out=100)
+  depthity <- rep(0,nrow(data))
+  dep <- c()
+  data <- apply(data, 2, scale)
+  norm.k2 <- rep(0, nrow(data))
+  error.k <- rep(0, nrow(data))
+  k.to.mid <- rep(0, nrow(data))
   for (i in 1:(nrow(data)-1)) {
     for (j in (i+1):nrow(data)) {
-      dist <- sqrt(sum((data[i, ] - data[j, ])^2))
-      if (dist > max.dist)
-        max.dist <- dist
-    }
-  }
-  range <- seq(0, max.dist, length.out=100)  #how far to go out away from the midpoint
-  range <- range[-1]
-  mult <- tan(pi * angle / 180)
-  ####initialize vector of classification potential
-  ####Compute depthity function for the ith point
-  ith.fit <- c()
-  depths <- matrix(0,ncol=2*length(range),nrow=choose(nrow(data),2))
-  ####run through all of points.  
-  m <- 1
-  for (i in 1:(nrow(data)-1)) {  
-    for (j in (i+1):nrow(data)) {
-      midpoint <- (data[i, ] + data[j, ]) / 2  #compute midpoint of a pair of points
-      data.c <- t(apply(data, 1, '-', midpoint))  #center data so midpoint is mapped to origin 
-      vect <- data.c[i, ]  #find orientation of line connecting the pair of points
-      proj1 <- apply(t(apply(data.c, 1, '*', vect)), 1, sum)/sum(vect^2)  #first step in projecting data onto this line
-      proj2 <- t(matrix(rep(vect, nrow(data)), ncol=nrow(data))) * proj1  #projections onto line
-      dist.p <- sqrt(apply((data.c - proj2)^2, 1, sum))  #distance from each point to its projection
-      vect.u <- vect / sqrt(sum(vect^2))  #unit version of vector for scaling
-      dep <- c()
-      for (k in 1:length(range)) {
-        split.p.l <- range[k] * vect.u  #get a split point on the left
-        split.p.r <- - range[k] * vect.u   #and another on the right
-        dist.p.l <- sqrt(apply(t(apply(proj2, 1, '-', split.p.l))^2, 1, sum))  #how far projection is from split point
-        dist.p.r <- sqrt(apply(t(apply(proj2, 1, '-', split.p.r))^2, 1, sum))
-        inside <- abs(dist.p.l + dist.p.r - 2 * range[k]) < tol  #find points between two split points
-        left <- dist.p.l < dist.p.r  #need to consider points beyond other split point, which side is it on? 
-        good.l <- (dist.p < mult * dist.p.l) & (inside | left == 0)  #find points in cone
-        good.r <- (dist.p < mult * dist.p.r) & (inside | left == 1)
-        toward.l <- inside & (dist.p.l < dist.p.r) #abs(dist.p.l + dist.p.o - range[k]) < tol
-        toward.r <- inside &! toward.l #abs(dist.p.r + dist.p.o - range[k]) < tol
-        toward.l <- toward.l & good.l
-        toward.r <- toward.r & good.r
-        dep <- c(dep, min(c(sum(toward.l), sum(good.l)-sum(toward.l))))
-        dep <- c(dep, min(c(sum(toward.r), sum(good.r)-sum(toward.r))))
+      for (k in 1:nrow(data)) {
+        norm.k2[k] <- gram[k,k] + 1/4*(gram[i,i]+gram[j,j]) + 1/2*gram[i,j]-gram[k,i]-gram[k,j]
+        k.to.mid[k] <- (gram[k,i]-gram[k,j]+1/2*(gram[j,j]-gram[i,i]))/sqrt(gram[i,i]+gram[j,j]-2*gram[i,j])
+        error.k[k] <- sqrt(abs(norm.k2[k] - k.to.mid[k]^2))
       }
-      depths[m, ] <- dep
-      m <- m + 1
+      for (c in 1:length(splits)) {
+        good <- rep(1, nrow(data))
+        s <- splits[c]
+        good[k.to.mid/s > 1] <- 0  #points on other side of cone tip removed
+        d.to.tip <- abs(k.to.mid - s)
+        good <- good * (abs(atan(error.k / d.to.tip)) < (angle/360*2*pi))  #points outside of cone removed
+        good <- good * (1 - 2*(sign(k.to.mid)==sign(s)))  #which side of midpoint are they on
+        depthity[c] <- min(c(sum(good==-1), sum(good==1)))
+      }
+      dep <- rbind(dep, depthity)
     }
   }
-  return(list(angle=angle, depths=depths))
+  return(list(angle=angle, depths=dep))
 }
+
 
 computeDepthity <- function(depthity.out, y) {
   # Function to take "local" depths computed by functuion depthity and return quantile function
