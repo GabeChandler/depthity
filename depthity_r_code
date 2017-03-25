@@ -134,6 +134,52 @@ depth.classify <- function(depths, y) {
   return(round(pred))
 }
 
+
+depthity.z.plot <- function(x, y, pt1, pt2, kernel="linear", p1=1, p2=0) {
+  # Computes and plots Z1 vs Z2, where these are the distances of the projection to the anchor point
+  #   and the distance between the data and their projections
+  # 
+  # Inputs:  
+  #  x - a data frame or matrix of the covariates 
+  #  y - a vector of the binary (0 or 1) class label
+  #  pt1, pt2, two index values for the points that determine the anchor point and line
+  #  kern - a type of kernel (linear, rbf, poly), or a function that corresponds to a kernel
+  #  p1, p2 - the parameters corresponding to the built in kernels
+  if (is.function(kernel)==TRUE)
+    kern <- kernel
+  if (kernel == "linear") {
+    kern <- function(x,y)
+      return(sum(x*y))
+  }
+  if (kernel == "rbf") {
+    kern <- function(x,y)
+      return(exp(-sum((x-y)^2)/p1))
+  }             
+  if (kernel == "poly") {
+    kern <- function(x,y)
+      return((sum(x*y)+p2)^p1)
+  }
+  data <- x
+  z1 <- c(); z2 <- c()
+  g <- matrix(0,nrow(data), nrow(data))
+  for (k in 1:nrow(data)) {
+    g[pt1, k] <- kern(data[pt1,], data[k,])
+    g[k, pt1] <- g[pt1, k]
+    g[pt2, k] <- kern(data[pt2,], data[k,])
+    g[k, pt2] <- g[pt2, k]
+  }
+  for (k in 1:nrow(data)) {
+    norm2 <- kern(data[k,], data[k,]) - g[k,pt1] - g[k,pt2] + g[pt1,pt1]/4 + g[pt2,pt2]/4 + g[pt1,pt2]/2
+    norm <- sqrt(-g[pt1,pt2]/2 + g[pt1,pt1]/4 + g[pt2,pt2]/4)
+    z1[k] <- (g[k,pt1]/2 - g[k,pt2]/2 - g[pt1,pt1]/4 + g[pt2,pt2]/4) / norm 
+    z2[k] <- sqrt(norm2 - z1[k]^2 + .00000001)
+  }
+  plot(z1[-c(pt1,pt2)],z2[-c(pt1,pt2)])
+  y1 <- y[-c(pt1,pt2)]
+  points(z1[-c(pt1,pt2)][y1==0],z2[-c(pt1,pt2)][y1==0], col='red')
+  return(cbind(z1[-c(pt1,pt2)],z2[-c(pt1,pt2)]))
+}
+
 ###Sample Usage
 data.temp <- iris[c(1:10,51:60),]
 x <- as.matrix(data.temp[,1:4])
