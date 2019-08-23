@@ -1,3 +1,5 @@
+#DO NOT USE, USE FUNCTION DEPTHITY IN OTHER FOLDER
+
 depthity.kern <- function(data, kern, angle=45) {
   # kernelized version of depthity
   # 
