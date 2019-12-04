@@ -34,6 +34,7 @@ depthity <- function(data, kernel="linear", range=2, angle=45, p1=1, p2=0) {
   #   p2 - second parameter for kernel
   # returns:
   #   object to be used by function computeDepthity
+  data <- apply(data, 2, scale). #z-scale data
   if (is.function(kernel)==TRUE)
     kern <- kernel
   if (kernel == "linear") {
@@ -58,7 +59,6 @@ depthity <- function(data, kernel="linear", range=2, angle=45, p1=1, p2=0) {
   splits <- seq(-range,range,length.out=100)
   depthity <- rep(0,nrow(data))
   dep <- c()
-  data <- apply(data, 2, scale)
   norm.k2 <- rep(0, nrow(data))
   error.k <- rep(0, nrow(data))
   k.to.mid <- rep(0, nrow(data))
@@ -129,9 +129,10 @@ depth.classify <- function(depths, y) {
   scores.data <- data.frame(scores, y)
   scores.train <- scores.data[is.na(y)==FALSE,]
   scores.test <- scores.data[is.na(y)==TRUE,]
-  fit <- svm(y ~ . , data=scores.train, kernel="linear")
-  pred <- predict(fit, scores.test)
-  return(round(pred))
+  scores.test <- rbind(scores.test, rep(0,9))
+  fit <- svm(as.factor(y) ~ . , data=scores.train, kernel="linear")
+  pred <- predict(fit, newdata=as.matrix(scores.test[,1:8]))
+  return(pred[1:(nrow(scores.test)-1)])
 }
 
 
