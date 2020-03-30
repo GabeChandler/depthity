@@ -34,7 +34,7 @@ depthity <- function(data, kernel="linear", range=2, angle=45, p1=1, p2=0) {
   #   p2 - second parameter for kernel
   # returns:
   #   object to be used by function computeDepthity
-  data <- apply(data, 2, scale). #z-scale data
+  data <- apply(data, 2, scale) #z-scale data
   if (is.function(kernel)==TRUE)
     kern <- kernel
   if (kernel == "linear") {
